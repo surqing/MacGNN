@@ -150,58 +150,109 @@ class EarlyStopper(object):
 
 # model training
 def train(model, optimizer, train_data_loader, test_data_loader, criterion, device, early_stopper, epochs=10, test_iter=50, log_interval=20):
+    """
+    训练模型。
     
-    total_loss = 0.0
-    tk0 = tqdm.tqdm(train_data_loader, smoothing=0, mininterval=1.0)
-    now_iter = 0
-    break_flag = False
+    参数:
+    model -- 要训练的模型。
+    optimizer -- 优化器，用于更新模型参数。
+    train_data_loader -- 训练数据的加载器。
+    test_data_loader -- 测试数据的加载器。
+    criterion -- 损失函数，用于计算模型预测与目标值之间的差异。
+    device -- 模型训练所在的设备（CPU或GPU）。
+    early_stopper -- 早停策略对象，用于根据验证集性能决定是否停止训练。
+    epochs -- 训练的轮数，默认为10。
+    test_iter -- 每隔多少迭代进行一次测试，默认为50。
+    log_interval -- 日志输出间隔，默认为20。
+    
+    返回:
+    无
+    """
+    total_loss = 0.0  # 训练过程中的总损失
+    tk0 = tqdm.tqdm(train_data_loader, smoothing=0, mininterval=1.0)  # 使用tqdm显示训练进度条
+    now_iter = 0  # 当前迭代次数
+    break_flag = False  # 是否中断训练的标志
+    
     for epo in range(epochs):
         for i, (fields, target) in enumerate(tk0):
-            model.train()
-            fields, target = fields.to(device), target.to(device)
+            model.train()  # 将模型设置为训练模式
+            fields, target = fields.to(device), target.to(device)  # 将数据移动到训练设备
             y = model(fields)
 
-            loss = criterion(y, target.float())
+            loss = criterion(y, target.float())  # 计算损失
 
-            model.zero_grad()
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
+            model.zero_grad()  # 清零梯度
+            loss.backward()  # 反向传播
+            optimizer.step()  # 更新参数
+            total_loss += loss.item()  # 累加当前损失
             now_iter += 1
             
+            # 每隔test_iter迭代进行一次测试
             if now_iter % test_iter == 0:
                 # testing
                 auc, log_losses, _ = evaluation(model, test_data_loader, device, use_gauc=False)
+                # 根据早停策略检查是否应该停止训练
                 if not early_stopper.is_continuable(model, auc, log_losses):
                     print(f'validation: best auc: {early_stopper.best_auc}, best logloss: {early_stopper.best_logloss}')
                     break_flag = True
                     break
             
+            # 每隔log_interval迭代输出一次日志
             if (i+1) % log_interval == 0:
                 # display
-                tk0.set_postfix(loss=total_loss / log_interval)
-                total_loss = 0
-                
+                tk0.set_postfix(loss=total_loss / log_interval)  # 更新进度条的损失显示
+                total_loss = 0  # 重置总损失
+        
         if break_flag:
-            break             
+            break
 
 
-# model testing
+# 模型评估
 def evaluation(model, data_loader, device, use_gauc=False):
+    """
+    对模型进行评估，计算ROC AUC、Log Loss以及可选的Group AUC。
+    
+    参数:
+    model: 需要评估的模型实例。
+    data_loader: 数据加载器，用于获取评估数据集。
+    device: 指定模型运行的设备（如CPU或GPU）。
+    use_gauc: 布尔值，表示是否计算Group AUC，默认为False。
+    
+    返回:
+    auc: ROC AUC得分。
+    log_loss: Log Loss得分。
+    gauc: 如果use_gauc为True，则返回Group AUC得分，否则为None。
+    """
+    # 设置模型为评估模式
     model.eval()
+    
+    # 初始化目标标签、预测结果及用户ID列表
     targets, predicts, user_id_list = list(), list(), list()
+    
+    # 在不进行梯度计算的上下文中评估模型
     with torch.no_grad():
         for fields, target in tqdm.tqdm(data_loader, smoothing=0, mininterval=1.0):
+            # 将数据移至指定设备
             fields, target = fields.to(device), target.to(device)
+            
+            # 模型前向传播得到预测值
             y = model(fields)
+            
+            # 收集用户ID、目标标签和预测结果
             user_id_list.extend(fields[:, 0].tolist())
             targets.extend(target.tolist())
             predicts.extend(y.tolist())
+    
+    # 计算Group AUC，如果use_gauc为True
     gauc = None
     if use_gauc:
         gauc = cal_group_auc(targets, predicts, user_id_list)
+    
+    # 将目标标签和预测结果转换为numpy数组以进行评估
     targets = np.array(targets)
     predicts = np.array(predicts)
+    
+    # 计算并返回ROC AUC和Log Loss
     return metrics.roc_auc_score(targets, predicts), metrics.log_loss(targets, predicts), gauc
     
     
@@ -240,6 +291,24 @@ for now_run in range(args.runs):
     logloss_runs.append(log_losses)
     gauc_runs.append(gauc)
 
+def write_to_file(file_path, content):
+    """
+    将内容写入指定的文件。如果文件夹不存在，则创建文件夹。
+
+    参数:
+    file_path (str): 文件的路径
+    content (str): 要写入文件的内容
+    """
+    # 获取文件的目录
+    directory = os.path.dirname(file_path)
+    
+    # 如果目录不存在，则创建目录
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    
+    # 将内容写入文件
+    with open(file_path, 'a') as file:
+        file.write(content)
 
 auc_mean, auc_std = np.mean(np.array(auc_runs), axis=0), np.std(np.array(auc_runs), axis=0)
 logloss_mean, logloss_std = np.mean(np.array(logloss_runs), axis=0), np.std(np.array(logloss_runs), axis=0)
@@ -248,3 +317,10 @@ gauc_mean, gauc_std = np.mean(np.array(gauc_runs), axis=0), np.std(np.array(gauc
 print("Test AUC: "+str(auc_mean)+" ± "+str(auc_std))
 print("Test GAUC: "+str(gauc_mean)+" ± "+str(gauc_std))
 print("Test Logloss: "+str(logloss_mean)+" ± "+str(logloss_std))
+
+# 将结果写入文件
+result_file_path = f'./result/{model_name}/{dataset_name}.txt'
+write_to_file(result_file_path, f'args: {args}\n')
+write_to_file(result_file_path, f'Test AUC: {(auc_mean*100):.2f}±{(auc_std*100):.2f}\n')
+write_to_file(result_file_path, f'Test GAUC: {(gauc_mean*100):.2f}±{(gauc_std*100):.2f}\n')
+write_to_file(result_file_path, f'Test Logloss: {(logloss_mean*100):.2f}±{(logloss_std*100):.2f}\n\n\n')
