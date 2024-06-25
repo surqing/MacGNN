@@ -464,3 +464,9 @@ Test GAUC: 76.94±0.58
 Test Logloss: 51.53±1.81
 
 
+args: Namespace(batch_size=1024, cuda_id=0, dataset_name='kuairec', early_epoch=5, embed_dim=8, epoch=20, learning_rate=0.01, model_name='macgnn', recent_len=20, record_path='record', runs=5, sample_size=1, save_path='chkpt', seed=0, seq_len=100, short_len=20, tau=1.9, test_iter=50, use_gpu=True, weight_decay=0.0)
+Test AUC: 77.69±3.41
+Test GAUC: 75.84±1.23
+Test Logloss: 54.72±3.78
+
+
