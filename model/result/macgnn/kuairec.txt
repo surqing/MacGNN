@@ -476,3 +476,15 @@ Test GAUC: 77.67±0.16
 Test Logloss: 49.68±0.68
 
 
+args: Namespace(batch_size=1024, cuda_id=0, dataset_name='kuairec', early_epoch=5, embed_dim=8, epoch=20, learning_rate=0.005, model_name='macgnn', recent_len=20, record_path='record', runs=5, sample_size=1, save_path='chkpt', seed=0, seq_len=100, short_len=20, tau=1.9, test_iter=50, use_gpu=True, weight_decay=0.0)
+Test AUC: 81.14±1.51
+Test GAUC: 77.20±0.57
+Test Logloss: 50.86±1.73
+
+
+args: Namespace(batch_size=1024, cuda_id=0, dataset_name='kuairec', early_epoch=5, embed_dim=8, epoch=20, learning_rate=0.01, model_name='macgnn', recent_len=20, record_path='record', runs=5, sample_size=1, save_path='chkpt', seed=0, seq_len=100, short_len=20, tau=3.8, test_iter=50, use_gpu=True, weight_decay=0.0)
+Test AUC: 81.06±1.46
+Test GAUC: 77.16±0.50
+Test Logloss: 51.30±1.70
+
+
