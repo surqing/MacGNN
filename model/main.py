@@ -60,24 +60,52 @@ def set_seed(seed, cuda):
 
 
 class EarlyStopper(object):
-
+    """
+    早期停止类，用于在训练过程中监控模型性能，并根据设定的条件决定是否停止训练。
+    """
+    
     def __init__(self, num_trials, save_path):
-        self.num_trials = num_trials
-        self.trial_counter = 0
-        self.best_auc = 0.0
-        self.best_logloss = 1000000
-        self.save_path = save_path
+        """
+        初始化早期停止器。
+        
+        设置最大尝试次数、当前尝试次数、最佳AUC和最佳对数损失的初始值，
+        以及模型最佳性能的保存路径。
+        """
+        self.num_trials = num_trials  # 允许的最大尝试次数
+        self.trial_counter = 0  # 当前的尝试次数
+        self.best_auc = 0.0  # 最好的AUC值，初始化为0.0
+        self.best_logloss = 1000000  # 最好的对数损失，初始化为一个非常大的数
+        self.save_path = save_path  # 模型最佳性能的保存路径
 
     def is_continuable(self, model, auc, log_loss):
+        """
+        判断模型训练是否应该继续。
+
+        这个方法根据当前模型的AUC和log_loss与之前记录的最佳值进行比较，来决定是否应该继续训练模型。
+        如果当前模型的AUC超过了之前的最佳AUC，则更新最佳AUC和log_loss，并保存当前模型，然后重置尝试次数并返回True。
+        如果当前模型的AUC没有超过最佳AUC，但尝试次数还没有达到设定的最大尝试次数，则增加尝试次数并返回True。
+        如果尝试次数已经达到或超过了最大尝试次数，则返回False，表示应该停止训练。
+
+        参数:
+        model: 当前的模型。
+        auc: 当前模型的AUC值。
+        log_loss: 当前模型的log_loss值。
+
+        返回:
+        True如果应该继续训练，否则返回False。
+        """
+        # 如果当前AUC超过最佳AUC，则更新最佳log_loss、最佳AUC和尝试次数，并保存当前模型，然后返回True
         if auc > self.best_auc:
             self.best_logloss = log_loss
             self.best_auc = auc
             self.trial_counter = 0
             torch.save(model, self.save_path)
             return True
+        # 如果当前AUC未超过最佳AUC，但尝试次数还没达到上限，则增加尝试次数并返回True
         elif self.trial_counter + 1 < self.num_trials:
             self.trial_counter += 1
             return True
+        # 如果尝试次数已经达到或超过上限，则返回False，表示停止训练
         else:
             return False
 
@@ -210,15 +238,23 @@ def write_to_file(file_path, content):
         file.write(content)
 
 def main():
+    """
+    程序的主入口函数。
+    解析命令行参数，初始化模型训练所需的配置和数据集，进行模型训练和评估。
+    """
+    
+    # 解析命令行参数
     args = parse_args()
     print(args)
 
+    # 从命令行参数中读取各种配置
     embed_dim = args.embed_dim
     learning_rate = args.learning_rate
     weight_decay = args.weight_decay
     epoch = args.epoch
     trials = args.early_epoch
     batch_size = args.batch_size
+    # 根据是否使用GPU和可用性决定设备
     device = torch.device("cuda:%d" % (args.cuda_id) if (torch.cuda.is_available() and args.use_gpu) else "cpu")
     save_path = args.save_path
     record_path = args.record_path
@@ -229,32 +265,28 @@ def main():
     recent_len = args.recent_len
     sample_size = args.sample_size
 
+    # 设置随机种子以保证可复现性
     set_seed(args.seed, args.use_gpu)
 
+    # 根据数据集名称加载不同数据集
     if args.dataset_name == 'ml-10m':
         with open(f'../data/{dataset_name}.pkl', 'rb') as f:
-            print(f)
             train_set = np.array(pickle.load(f, encoding='latin1')) 
             test_set = np.array(pickle.load(f, encoding='latin1')) 
             cate_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
             u_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
             i_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
             user_count, item_count, cate_count, u_cluster_num, i_cluster_num = pickle.load(f)
-
-
-    if args.dataset_name == 'elec':
+    elif args.dataset_name == 'elec':
         with open(f'../data/{dataset_name}.pkl', 'rb') as f:
-            print(f)
             train_set = np.array(pickle.load(f, encoding='latin1'))  
             test_set = np.array(pickle.load(f, encoding='latin1')) 
             cate_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)  
             u_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
             i_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
             user_count, item_count, cate_count, u_cluster_num, i_cluster_num = pickle.load(f)
-
-    if args.dataset_name == 'kuairec':
+    elif args.dataset_name == 'kuairec':
         with open(f'../data/{dataset_name}.pkl', 'rb') as f:
-            print(f)
             train_set = np.array(pickle.load(f, encoding='latin1'))  
             test_set = np.array(pickle.load(f, encoding='latin1'))  
             cate_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device) 
@@ -262,30 +294,38 @@ def main():
             i_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
             user_count, item_count, cate_count, u_cluster_num, i_cluster_num = pickle.load(f)
 
-
+    # 计算数据集的大小和类别数量
     train_size = (u_cluster_num+i_cluster_num+recent_len+1+1)*2
     test_size = (u_cluster_num+i_cluster_num+recent_len+1+1)*2
     u_cluster_num -= 1
 
+    # 定义字段维度，包括用户、物品和类别的数量
     field_dims = [user_count + 1, item_count + 1, cate_count + 1]  # idx-0 for padding
 
+    # 使用数据集构建器构建训练集和测试集
     train_data = DatasetBuilder(data=train_set, user_count=user_count, item_count=item_count)
     test_data = DatasetBuilder(data=test_set, user_count=user_count, item_count=item_count)
 
+    # 创建数据加载器
     train_data_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
     test_data_loader = DataLoader(test_data, batch_size=batch_size)
    
+    # 初始化性能指标列表
     auc_runs = []
     logloss_runs = []
     gauc_runs = []
 
+    # 进行多次运行以收集性能指标
     for now_run in range(args.runs):
+        # 如果不是单次运行，则每次运行重新设置随机种子
         if args.runs != 1:
             set_seed(now_run, args.use_gpu)
 
+        # 打印当前运行的信息
         print("###########now run: %d##############" % now_run)
         print("use dataset: " + dataset_name)
 
+        # 根据模型名称创建模型
         print("now model: " + model_name)
         if model_name == 'macgnn':
             model = MacGNN(field_dims=field_dims, u_group_num=u_cluster_num, i_group_num=i_cluster_num,
@@ -293,27 +333,33 @@ def main():
         else:
             raise Exception("no model selected!")
 
+        # 定义损失函数和优化器
         criterion = torch.nn.BCELoss()
-        
         optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate, weight_decay=weight_decay)
         
+        # 定义早停策略
         early_stopper = EarlyStopper(num_trials=trials, save_path=f'{model_name}_{dataset_name}.pt')
 
-        
+        # 训练模型
         train(model, optimizer, train_data_loader, test_data_loader, criterion, device, early_stopper, epochs=args.epoch, test_iter=args.test_iter, log_interval=20)
         
+        # 加载最佳模型
         model = torch.load(f'{model_name}_{dataset_name}.pt').to(device)
+        # 评估模型性能
         auc, log_losses, gauc = evaluation(model, test_data_loader, device, use_gauc=True)
         
+        # 记录性能指标
         print(f'test auc: {auc}, test logloss: {log_losses}, test gauc: {gauc}')
         auc_runs.append(auc)
         logloss_runs.append(log_losses)
         gauc_runs.append(gauc)
 
+    # 计算性能指标的平均值和标准差
     auc_mean, auc_std = np.mean(np.array(auc_runs), axis=0), np.std(np.array(auc_runs), axis=0)
     logloss_mean, logloss_std = np.mean(np.array(logloss_runs), axis=0), np.std(np.array(logloss_runs), axis=0)
     gauc_mean, gauc_std = np.mean(np.array(gauc_runs), axis=0), np.std(np.array(gauc_runs), axis=0)
 
+    # 打印性能指标的平均值和标准差
     print("Test AUC: "+str(auc_mean)+" ± "+str(auc_std))
     print("Test GAUC: "+str(gauc_mean)+" ± "+str(gauc_std))
     print("Test Logloss: "+str(logloss_mean)+" ± "+str(logloss_std))
