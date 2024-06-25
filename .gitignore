@@ -1,2 +1,4 @@
 /data/dataset/
 data/*.pkl
+__pycache__/
+model/*.pt

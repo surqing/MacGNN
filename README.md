@@ -10,13 +10,13 @@ To overcome this challenge, we propose a new approach by introducing the concept
 
 ## Requirements
 ```
-python >= 3.8
-torch  == 1.11.0
-pickle == 0.7.5
-scikit-learn == 1.1.1
-pandas == 1.4.1
-numpy == 1.21.2
-tqdm == 4.63.0
+python==3.8
+torch==1.11.0
+scikit-learn==1.1.1
+pandas==1.4.1
+numpy==1.21.2
+tqdm==4.63.0
+matplotlib
 ```
 
 ## Environment
