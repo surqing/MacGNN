@@ -44,14 +44,7 @@ def parse_args():
     parser.add_argument('--tau', type=float, default=0.8)
     parser.add_argument('--test_iter', type=int, default=50)
 
-    parser.parse_args()
-
-    return parser
-
-
-args = parse_args()
-
-print(args)
+    return parser.parse_args()
 
 
 def set_seed(seed, cuda):
@@ -64,70 +57,6 @@ def set_seed(seed, cuda):
         torch.cuda.manual_seed(seed)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
-
-
-embed_dim = args.embed_dim
-learning_rate = args.learning_rate
-weight_decay = args.weight_decay
-epoch = args.epoch
-trials = args.early_epoch
-batch_size = args.batch_size
-device = torch.device("cuda:%d" % (args.cuda_id) if (torch.cuda.is_available() and args.use_gpu) else "cpu")
-save_path = args.save_path
-record_path = args.record_path
-model_name = args.model_name
-dataset_name = args.dataset_name
-seq_len = args.seq_len
-short_len = args.short_len
-recent_len = args.recent_len
-sample_size = args.sample_size
-
-set_seed(args.seed, args.use_gpu)
-
-
-if args.dataset_name == 'ml-10m':
-    with open(f'../data/{dataset_name}.pkl', 'rb') as f:
-        print(f)
-        train_set = np.array(pickle.load(f, encoding='latin1')) 
-        test_set = np.array(pickle.load(f, encoding='latin1')) 
-        cate_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
-        u_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
-        i_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
-        user_count, item_count, cate_count, u_cluster_num, i_cluster_num = pickle.load(f)
-
-
-if args.dataset_name == 'elec':
-    with open(f'../data/{dataset_name}.pkl', 'rb') as f:
-        print(f)
-        train_set = np.array(pickle.load(f, encoding='latin1'))  
-        test_set = np.array(pickle.load(f, encoding='latin1')) 
-        cate_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)  
-        u_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
-        i_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
-        user_count, item_count, cate_count, u_cluster_num, i_cluster_num = pickle.load(f)
-
-if args.dataset_name == 'kuairec':
-    with open(f'../data/{dataset_name}.pkl', 'rb') as f:
-        print(f)
-        train_set = np.array(pickle.load(f, encoding='latin1'))  
-        test_set = np.array(pickle.load(f, encoding='latin1'))  
-        cate_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device) 
-        u_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
-        i_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
-        user_count, item_count, cate_count, u_cluster_num, i_cluster_num = pickle.load(f)
-
-
-train_size = (u_cluster_num+i_cluster_num+recent_len+1+1)*2
-test_size = (u_cluster_num+i_cluster_num+recent_len+1+1)*2
-u_cluster_num -= 1
-
-field_dims = [user_count + 1, item_count + 1, cate_count + 1]  # idx-0 for padding
-
-train_data = DatasetBuilder(data=train_set, user_count=user_count, item_count=item_count)
-test_data = DatasetBuilder(data=test_set, user_count=user_count, item_count=item_count)
-
-train_data_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
-test_data_loader = DataLoader(test_data, batch_size=batch_size)
 
 
 class EarlyStopper(object):
@@ -260,41 +189,6 @@ def evaluation(model, data_loader, device, use_gauc=False):
     # 计算并返回ROC AUC和Log Loss
     return metrics.roc_auc_score(targets, predicts), metrics.log_loss(targets, predicts), gauc
     
-    
-auc_runs = []
-logloss_runs = []
-gauc_runs = []
-
-for now_run in range(args.runs):
-    if args.runs != 1:
-        set_seed(now_run, args.use_gpu)
-
-    print("###########now run: %d##############" % now_run)
-    print("use dataset: " + dataset_name)
-
-    print("now model: " + model_name)
-    if model_name == 'macgnn':
-        model = MacGNN(field_dims=field_dims, u_group_num=u_cluster_num, i_group_num=i_cluster_num,
-                       embed_dim=embed_dim, recent_len=recent_len, tau=args.tau, device=device).to(device)
-    else:
-        raise Exception("no model selected!")
-
-    criterion = torch.nn.BCELoss()
-    
-    optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    
-    early_stopper = EarlyStopper(num_trials=trials, save_path=f'{model_name}_{dataset_name}.pt')
-
-    
-    train(model, optimizer, train_data_loader, test_data_loader, criterion, device, early_stopper, epochs=args.epoch, test_iter=args.test_iter, log_interval=20)
-    
-    model = torch.load(f'{model_name}_{dataset_name}.pt').to(device)
-    auc, log_losses, gauc = evaluation(model, test_data_loader, device, use_gauc=True)
-    
-    print(f'test auc: {auc}, test logloss: {log_losses}, test gauc: {gauc}')
-    auc_runs.append(auc)
-    logloss_runs.append(log_losses)
-    gauc_runs.append(gauc)
 
 def write_to_file(file_path, content):
     """
@@ -315,17 +209,121 @@ def write_to_file(file_path, content):
     with open(file_path, 'a') as file:
         file.write(content)
 
-auc_mean, auc_std = np.mean(np.array(auc_runs), axis=0), np.std(np.array(auc_runs), axis=0)
-logloss_mean, logloss_std = np.mean(np.array(logloss_runs), axis=0), np.std(np.array(logloss_runs), axis=0)
-gauc_mean, gauc_std = np.mean(np.array(gauc_runs), axis=0), np.std(np.array(gauc_runs), axis=0)
+def main():
+    args = parse_args()
+    print(args)
 
-print("Test AUC: "+str(auc_mean)+" ± "+str(auc_std))
-print("Test GAUC: "+str(gauc_mean)+" ± "+str(gauc_std))
-print("Test Logloss: "+str(logloss_mean)+" ± "+str(logloss_std))
+    embed_dim = args.embed_dim
+    learning_rate = args.learning_rate
+    weight_decay = args.weight_decay
+    epoch = args.epoch
+    trials = args.early_epoch
+    batch_size = args.batch_size
+    device = torch.device("cuda:%d" % (args.cuda_id) if (torch.cuda.is_available() and args.use_gpu) else "cpu")
+    save_path = args.save_path
+    record_path = args.record_path
+    model_name = args.model_name
+    dataset_name = args.dataset_name
+    seq_len = args.seq_len
+    short_len = args.short_len
+    recent_len = args.recent_len
+    sample_size = args.sample_size
 
-# 将结果写入文件
-result_file_path = f'./result/{model_name}/{dataset_name}.txt'
-write_to_file(result_file_path, f'args: {args}\n')
-write_to_file(result_file_path, f'Test AUC: {(auc_mean*100):.2f}±{(auc_std*100):.2f}\n')
-write_to_file(result_file_path, f'Test GAUC: {(gauc_mean*100):.2f}±{(gauc_std*100):.2f}\n')
-write_to_file(result_file_path, f'Test Logloss: {(logloss_mean*100):.2f}±{(logloss_std*100):.2f}\n\n\n')
+    set_seed(args.seed, args.use_gpu)
+
+    if args.dataset_name == 'ml-10m':
+        with open(f'../data/{dataset_name}.pkl', 'rb') as f:
+            print(f)
+            train_set = np.array(pickle.load(f, encoding='latin1')) 
+            test_set = np.array(pickle.load(f, encoding='latin1')) 
+            cate_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
+            u_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
+            i_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
+            user_count, item_count, cate_count, u_cluster_num, i_cluster_num = pickle.load(f)
+
+
+    if args.dataset_name == 'elec':
+        with open(f'../data/{dataset_name}.pkl', 'rb') as f:
+            print(f)
+            train_set = np.array(pickle.load(f, encoding='latin1'))  
+            test_set = np.array(pickle.load(f, encoding='latin1')) 
+            cate_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)  
+            u_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
+            i_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
+            user_count, item_count, cate_count, u_cluster_num, i_cluster_num = pickle.load(f)
+
+    if args.dataset_name == 'kuairec':
+        with open(f'../data/{dataset_name}.pkl', 'rb') as f:
+            print(f)
+            train_set = np.array(pickle.load(f, encoding='latin1'))  
+            test_set = np.array(pickle.load(f, encoding='latin1'))  
+            cate_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device) 
+            u_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
+            i_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
+            user_count, item_count, cate_count, u_cluster_num, i_cluster_num = pickle.load(f)
+
+
+    train_size = (u_cluster_num+i_cluster_num+recent_len+1+1)*2
+    test_size = (u_cluster_num+i_cluster_num+recent_len+1+1)*2
+    u_cluster_num -= 1
+
+    field_dims = [user_count + 1, item_count + 1, cate_count + 1]  # idx-0 for padding
+
+    train_data = DatasetBuilder(data=train_set, user_count=user_count, item_count=item_count)
+    test_data = DatasetBuilder(data=test_set, user_count=user_count, item_count=item_count)
+
+    train_data_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+    test_data_loader = DataLoader(test_data, batch_size=batch_size)
+   
+    auc_runs = []
+    logloss_runs = []
+    gauc_runs = []
+
+    for now_run in range(args.runs):
+        if args.runs != 1:
+            set_seed(now_run, args.use_gpu)
+
+        print("###########now run: %d##############" % now_run)
+        print("use dataset: " + dataset_name)
+
+        print("now model: " + model_name)
+        if model_name == 'macgnn':
+            model = MacGNN(field_dims=field_dims, u_group_num=u_cluster_num, i_group_num=i_cluster_num,
+                        embed_dim=embed_dim, recent_len=recent_len, tau=args.tau, device=device).to(device)
+        else:
+            raise Exception("no model selected!")
+
+        criterion = torch.nn.BCELoss()
+        
+        optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        
+        early_stopper = EarlyStopper(num_trials=trials, save_path=f'{model_name}_{dataset_name}.pt')
+
+        
+        train(model, optimizer, train_data_loader, test_data_loader, criterion, device, early_stopper, epochs=args.epoch, test_iter=args.test_iter, log_interval=20)
+        
+        model = torch.load(f'{model_name}_{dataset_name}.pt').to(device)
+        auc, log_losses, gauc = evaluation(model, test_data_loader, device, use_gauc=True)
+        
+        print(f'test auc: {auc}, test logloss: {log_losses}, test gauc: {gauc}')
+        auc_runs.append(auc)
+        logloss_runs.append(log_losses)
+        gauc_runs.append(gauc)
+
+    auc_mean, auc_std = np.mean(np.array(auc_runs), axis=0), np.std(np.array(auc_runs), axis=0)
+    logloss_mean, logloss_std = np.mean(np.array(logloss_runs), axis=0), np.std(np.array(logloss_runs), axis=0)
+    gauc_mean, gauc_std = np.mean(np.array(gauc_runs), axis=0), np.std(np.array(gauc_runs), axis=0)
+
+    print("Test AUC: "+str(auc_mean)+" ± "+str(auc_std))
+    print("Test GAUC: "+str(gauc_mean)+" ± "+str(gauc_std))
+    print("Test Logloss: "+str(logloss_mean)+" ± "+str(logloss_std))
+
+    # 将结果写入文件
+    result_file_path = f'./result/{model_name}/{dataset_name}.txt'
+    write_to_file(result_file_path, f'args: {args}\n')
+    write_to_file(result_file_path, f'Test AUC: {(auc_mean*100):.2f}±{(auc_std*100):.2f}\n')
+    write_to_file(result_file_path, f'Test GAUC: {(gauc_mean*100):.2f}±{(gauc_std*100):.2f}\n')
+    write_to_file(result_file_path, f'Test Logloss: {(logloss_mean*100):.2f}±{(logloss_std*100):.2f}\n\n\n')
+
+if __name__ == '__main__':
+    main()
