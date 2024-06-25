@@ -12,45 +12,84 @@ import math
 
 # 定义Dice类，用于在前向传播中实现特定的加权操作
 class Dice(nn.Module):
+    """
+    Dice类初始化方法。
+    初始化时，除了调用nn.Module的初始化方法，还定义了一个可学习的参数alpha。
+    """
     
     def __init__(self):
-        super(Dice, self).__init__()
-        self.alpha = nn.Parameter(torch.zeros((1, )))
+        """
+        初始化Dice类。
+        """
+        super(Dice, self).__init__()  # 调用nn.Module的初始化方法
+        self.alpha = nn.Parameter(torch.zeros((1, )))  # 初始化alpha参数为0，作为一个可学习的参数
         
     def forward(self, x):
+        """
+        定义前向传播过程。
+        
+        参数:
+        x: 输入的张量。
+        
+        返回:
+        加权后的输入张量。
+        """
+        # 计算输入x在维度0上的平均值，用于标准化
         # 计算平均值和标准差，用于标准化输入x
         avg = x.mean(dim=0)
+        # 计算输入x在维度0上的标准差，用于标准化
         std = x.std(dim=0)
+        # 标准化输入x，使其均值为0，标准差为1
         # 标准化x
         norm_x = (x - avg) / std
+        # 避免除以0的错误，加一个非常小的数1e-8
         # 计算sigmoid函数的值，用于加权
         p = torch.sigmoid(norm_x + 1e-8)
 
+        # 根据sigmoid函数的输出p对输入x进行加权，同时考虑alpha参数的作用
         # 返回加权后的结果
         return x.mul(p) + self.alpha * x.mul(1 - p)
 
 # 定义NeighborAggregation类，用于邻居节点的聚合操作
 class NeighborAggregation(nn.Module):
+    """
+    邻居聚合类，用于实现基于注意力机制的节点聚合操作。
 
+    参数:
+    embed_dim (int): 嵌入维度，默认为8。
+    hidden_dim (int): 隐藏层维度，默认为8。
+    """
     def __init__(self, embed_dim=8, hidden_dim=8):
         super(NeighborAggregation, self).__init__()
         # 初始化Q、K、V的线性变换矩阵
         self.Q_w = nn.Linear(embed_dim, hidden_dim, bias=False)
         self.K_w = nn.Linear(embed_dim, hidden_dim, bias=False)
         self.V_w = nn.Linear(embed_dim, hidden_dim, bias=False)
-        # 设置转换系数
+        # 设置转换系数，用于规范化注意力权重计算
         self.trans_d = math.sqrt(hidden_dim)
         # 初始化softmax函数，用于计算注意力权重
         self.get_score = nn.Softmax(dim=-1)
 
     def forward(self, query, key):
-        # 对query和key进行线性变换
+        """
+        前向传播函数，计算注意力机制下的邻居节点聚合结果。
+
+        参数:
+        query (Tensor): 查询向量。
+        key (Tensor): 关键向量。
+
+        返回:
+        Tensor: 聚合后的结果向量。
+        """
+        # 对查询向量进行线性变换
         trans_Q = self.Q_w(query)
+        # 对关键向量进行线性变换
         trans_K = self.K_w(key)
+        # 对查询向量进行第二次线性变换，得到值向量
         trans_V = self.V_w(query)
-        # 计算注意力权重
+        # 计算注意力权重，基于变换后的查询和关键向量的内积
         score = self.get_score(torch.bmm(trans_Q, torch.transpose(trans_K, 1, 2)) / (self.trans_d))
-        # 根据注意力权重聚合信息
+        # 根据注意力权重对值向量进行加权求和，得到聚合结果
         answer = torch.mul(trans_V, score)
         return answer
 
