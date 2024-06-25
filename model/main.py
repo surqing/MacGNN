@@ -21,30 +21,35 @@ import os
 
 
 ############################get-args####################################
-parser = argparse.ArgumentParser()
-parser.add_argument('--dataset_name', default='ml-10m')
-parser.add_argument('--model_name', default='cgi')
-parser.add_argument('--epoch', type=int, default=20)
-parser.add_argument('--early_epoch', type=int, default=5)
-parser.add_argument('--learning_rate', type=float, default=1e-2)
-parser.add_argument('--weight_decay', type=float, default=5e-5)
-parser.add_argument('--batch_size', type=int, default=1024)
-parser.add_argument('--sample_size', type=int, default=2)
-parser.add_argument('--embed_dim', type=int, default=10)
-parser.add_argument('--save_path', default='chkpt')
-parser.add_argument('--record_path', default='record')
-parser.add_argument('--use_gpu', default=True, help='Whether to use CUDA')
-parser.add_argument('--cuda_id', type=int, default=0, help='CUDA id')
-parser.add_argument('--seq_len', type=int, default=100, help='user hist len')
-parser.add_argument('--short_len', type=int, default=20, help='user hist len')
-parser.add_argument('--recent_len', type=int, default=20, help='user hist len')
-parser.add_argument('--runs', type=int, default=1, help='model runs')
-parser.add_argument('--seed', type=int, default=2023)
-parser.add_argument('--tau', type=float, default=0.8)
-parser.add_argument('--test_iter', type=int, default=50)
+def parse_args():
+    parser = argparse.ArgumentParser(description='model trainning')
+    parser.add_argument('--dataset_name', type=str, default='ml-10m', choices=['ml-10m', 'elec', 'kuairec'])
+    parser.add_argument('--model_name', default='cgi')
+    parser.add_argument('--epoch', type=int, default=20)
+    parser.add_argument('--early_epoch', type=int, default=5)
+    parser.add_argument('--learning_rate', type=float, default=1e-2)
+    parser.add_argument('--weight_decay', type=float, default=5e-5)
+    parser.add_argument('--batch_size', type=int, default=1024)
+    parser.add_argument('--sample_size', type=int, default=2)
+    parser.add_argument('--embed_dim', type=int, default=10)
+    parser.add_argument('--save_path', default='chkpt')
+    parser.add_argument('--record_path', default='record')
+    parser.add_argument('--use_gpu', default=True, help='Whether to use CUDA')
+    parser.add_argument('--cuda_id', type=int, default=0, help='CUDA id')
+    parser.add_argument('--seq_len', type=int, default=100, help='user hist len')
+    parser.add_argument('--short_len', type=int, default=20, help='user hist len')
+    parser.add_argument('--recent_len', type=int, default=20, help='user hist len')
+    parser.add_argument('--runs', type=int, default=1, help='model runs')
+    parser.add_argument('--seed', type=int, default=2023)
+    parser.add_argument('--tau', type=float, default=0.8)
+    parser.add_argument('--test_iter', type=int, default=50)
+
+    parser.parse_args()
+
+    return parser
 
 
-args = parser.parse_args()
+args = parse_args()
 
 print(args)
 
