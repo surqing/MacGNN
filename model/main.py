@@ -247,6 +247,9 @@ def main():
     args = parse_args()
     print(args)
 
+    # 手动设置工作目录，确保在程序运行时，当前工作目录为当前脚本所在的目录
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
     # 从命令行参数中读取各种配置
     embed_dim = args.embed_dim
     learning_rate = args.learning_rate
@@ -272,7 +275,16 @@ def main():
     if args.dataset_name == 'ml-10m':
         with open(f'../data/{dataset_name}.pkl', 'rb') as f:
             train_set = np.array(pickle.load(f, encoding='latin1')) 
-            test_set = np.array(pickle.load(f, encoding='latin1')) 
+            test_set  = np.array(pickle.load(f, encoding='latin1')) 
+            # # 输出内容类型和结构
+            # print("Train set type:", type(train_set))
+            # print("Test set type:", type(test_set))
+            # print("Train set shape:", train_set.shape)
+            # print("Test set shape:", test_set.shape)
+
+            # # 如果你想查看具体内容，可以直接打印或查看某个样本
+            # print("Train set example:", train_set[0])
+            # print("Test set example:", test_set[0])
             cate_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
             u_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
             i_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
