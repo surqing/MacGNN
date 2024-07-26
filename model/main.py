@@ -19,12 +19,14 @@ import argparse
 import random
 import os
 
+# 手动设置工作目录，确保在程序运行时，当前工作目录为当前脚本所在的目录
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 ############################get-args####################################
 def parse_args():
     parser = argparse.ArgumentParser(description='model trainning')
     parser.add_argument('--dataset_name', type=str, default='ml-10m', choices=['ml-10m', 'elec', 'kuairec'])
-    parser.add_argument('--model_name', default='cgi')
+    parser.add_argument('--model_name', default='macgnn')
     parser.add_argument('--epoch', type=int, default=20)
     parser.add_argument('--early_epoch', type=int, default=5)
     parser.add_argument('--learning_rate', type=float, default=1e-2)
@@ -131,12 +133,16 @@ def train(model, optimizer, train_data_loader, test_data_loader, criterion, devi
     无
     """
     total_loss = 0.0  # 训练过程中的总损失
-    tk0 = tqdm.tqdm(train_data_loader, smoothing=0, mininterval=1.0)  # 使用tqdm显示训练进度条
+    tk0 = tqdm.tqdm(train_data_loader, smoothing=1, mininterval=1.0)  # 使用tqdm显示训练进度条
     now_iter = 0  # 当前迭代次数
     break_flag = False  # 是否中断训练的标志
     
     for epo in range(epochs):
         for i, (fields, target) in enumerate(tk0):
+            # DEBUG
+            # print('DEBUG')
+            # print(i, fields, target, fields.shape, target.shape)
+            
             model.train()  # 将模型设置为训练模式
             fields, target = fields.to(device), target.to(device)  # 将数据移动到训练设备
             y = model(fields)
@@ -247,9 +253,6 @@ def main():
     args = parse_args()
     print(args)
 
-    # 手动设置工作目录，确保在程序运行时，当前工作目录为当前脚本所在的目录
-    os.chdir(os.path.dirname(os.path.abspath(__file__)))
-
     # 从命令行参数中读取各种配置
     embed_dim = args.embed_dim
     learning_rate = args.learning_rate
@@ -276,15 +279,7 @@ def main():
         with open(f'../data/{dataset_name}.pkl', 'rb') as f:
             train_set = np.array(pickle.load(f, encoding='latin1')) 
             test_set  = np.array(pickle.load(f, encoding='latin1')) 
-            # # 输出内容类型和结构
-            # print("Train set type:", type(train_set))
-            # print("Test set type:", type(test_set))
-            # print("Train set shape:", train_set.shape)
-            # print("Test set shape:", test_set.shape)
-
-            # # 如果你想查看具体内容，可以直接打印或查看某个样本
-            # print("Train set example:", train_set[0])
-            # print("Test set example:", test_set[0])
+            # 将 dump 的对象依次张量化并移动到指定设备
             cate_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
             u_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
             i_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
@@ -306,9 +301,10 @@ def main():
             i_cluster_list = torch.tensor(pickle.load(f, encoding='latin1')).to(device)
             user_count, item_count, cate_count, u_cluster_num, i_cluster_num = pickle.load(f)
 
-    # 计算数据集的大小和类别数量
-    train_size = (u_cluster_num+i_cluster_num+recent_len+1+1)*2
-    test_size = (u_cluster_num+i_cluster_num+recent_len+1+1)*2
+
+    # 计算数据集的 大小 和 类别数量
+    train_size = (u_cluster_num + i_cluster_num + recent_len +1 +1) * 2
+    test_size  = (u_cluster_num + i_cluster_num + recent_len +1 +1) * 2
     u_cluster_num -= 1
 
     # 定义字段维度，包括用户、物品和类别的数量
@@ -346,14 +342,14 @@ def main():
             raise Exception("no model selected!")
 
         # 定义损失函数和优化器
-        criterion = torch.nn.BCELoss()
-        optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        criterion = torch.nn.BCELoss() # 二元交叉熵损失函数：L = - [y * log(p) + (1 - y) * log(1 - p))]
+        optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate, weight_decay=weight_decay) # 优化器给定
         
         # 定义早停策略
         early_stopper = EarlyStopper(num_trials=trials, save_path=f'{model_name}_{dataset_name}.pt')
 
         # 训练模型
-        train(model, optimizer, train_data_loader, test_data_loader, criterion, device, early_stopper, epochs=args.epoch, test_iter=args.test_iter, log_interval=20)
+        train(model, optimizer, train_data_loader, test_data_loader, criterion, device, early_stopper, epochs=epoch, test_iter=args.test_iter, log_interval=20)
         
         # 加载最佳模型
         model = torch.load(f'{model_name}_{dataset_name}.pt').to(device)

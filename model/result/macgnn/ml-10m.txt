@@ -10,3 +10,27 @@ Test GAUC: 72.07±0.12
 Test Logloss: 58.65±0.13
 
 
+args: Namespace(batch_size=1024, cuda_id=0, dataset_name='ml-10m', early_epoch=5, embed_dim=32, epoch=20, learning_rate=0.01, model_name='macgnn', recent_len=20, record_path='record', runs=5, sample_size=2, save_path='chkpt', seed=2023, seq_len=100, short_len=20, tau=1.9, test_iter=50, use_gpu=True, weight_decay=5e-05)
+Test AUC: 74.63±0.21
+Test GAUC: 72.03±0.19
+Test Logloss: 58.53±0.13
+
+
+args: Namespace(batch_size=1024, cuda_id=0, dataset_name='ml-10m', early_epoch=5, embed_dim=10, epoch=20, learning_rate=0.01, model_name='macgnn', recent_len=20, record_path='record', runs=1, sample_size=2, save_path='chkpt', seed=2023, seq_len=100, short_len=20, tau=0.8, test_iter=50, use_gpu=True, weight_decay=5e-05)
+Test AUC: 72.08±0.00
+Test GAUC: 68.47±0.00
+Test Logloss: 61.28±0.00
+
+
+args: Namespace(batch_size=1024, cuda_id=0, dataset_name='ml-10m', early_epoch=5, embed_dim=10, epoch=20, learning_rate=0.01, model_name='macgnn', recent_len=20, record_path='record', runs=1, sample_size=2, save_path='chkpt', seed=2023, seq_len=100, short_len=20, tau=0.8, test_iter=50, use_gpu=True, weight_decay=5e-05)
+Test AUC: 74.37±0.00
+Test GAUC: 71.93±0.00
+Test Logloss: 58.91±0.00
+
+
+args: Namespace(batch_size=128, cuda_id=0, dataset_name='ml-10m', early_epoch=5, embed_dim=4096, epoch=20, learning_rate=0.01, model_name='macgnn', recent_len=20, record_path='record', runs=1, sample_size=2, save_path='chkpt', seed=2023, seq_len=100, short_len=20, tau=0.8, test_iter=50, use_gpu=True, weight_decay=5e-05)
+Test AUC: 51.36±0.00
+Test GAUC: 51.27±0.00
+Test Logloss: 1826.16±0.00
+
+

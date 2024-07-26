@@ -3,7 +3,7 @@
 """
 This is a example of MAG generation and data processing on the MovieLens dataset.
 """
-
+import os
 import numpy as np
 import csv
 import pandas as pd
@@ -14,6 +14,9 @@ from scipy.sparse import csr_matrix
 
 np.random.seed(2023)
 random.seed(2023)
+
+root_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(root_dir)
 
 path = './ratings.dat'
 reviews_df  = pd.read_csv(path,sep='::',header=None)
@@ -53,18 +56,18 @@ uid_map, uid_key = build_map(reviews_df, 'user_id')
 
 
 path = './movies.dat'
-meta_df  = pd.read_csv(path,sep='::',header=None)
+meta_df = pd.read_csv(path,sep='::',header=None)
 meta_df.columns = ['item_id','title','genres']
 # 选择保留'item_id'和'genres'列，去除'title'列
 meta_df = meta_df[['item_id', 'genres']]
-# 将'genres'列中的第一个类型提取出来作为新的'genres'值
+# 将'genres'列中的第一个类型提取出来作为新的'genres'值 
 meta_df.loc[:,'genres'] = meta_df['genres'].map(lambda x: x.split('|')[0])
 
 vid_map, vid_key = build_map(meta_df, 'item_id')
 cat_map, cat_key = build_map(meta_df, 'genres')
 
 # 统计数据集的元素数量
-user_count, item_count, cate_count, example_count =    len(uid_map), len(vid_map), len(cat_map), reviews_df.shape[0]
+user_count, item_count, cate_count, example_count = len(uid_map), len(vid_map), len(cat_map), reviews_df.shape[0]
 print('user_count: %d\titem_count: %d\tcate_count: %d\texample_count: %d' %
       (user_count, item_count, cate_count, example_count))
 
@@ -85,7 +88,7 @@ cate_list = [meta_df['genres'][i] for i in range(len(vid_map))]
 # 将类别列表转换为numpy数组，并指定数据类型为int32，以优化计算性能
 cate_list = np.array(cate_list, dtype=np.int32)
 
-# 在类别数组的开始位置插入0，用于表示未分类或未知的类别
+# 是填充还是表示未分类？
 cate_list = np.insert(cate_list, 0, 0)
 
 # 使用pickle模块以二进制写模式打开文件remap.pkl，用于存储数据框架和列表
@@ -116,8 +119,8 @@ for userId, hist in reviews_df.groupby('user_id'):
     neg_cnt += len(label_list) - sum(label_list)
 
 # 计算训练集和测试集的时间截点
-train_hist_time, test_time = list(np.quantile(reviews_df.timestamp, [0.80, 0.90]))
-# 根据时间截点划分训练集和测试集
+train_hist_time, test_time = list(np.quantile(reviews_df.timestamp, [0.85, 0.90]))
+# 取数据集整体时间的 80% 分位数为训练集时间点，90%分位数为测试集时间点 
 train_df = reviews_df[reviews_df.timestamp <= test_time]
 test_df = reviews_df[reviews_df.timestamp > test_time]
 
@@ -203,17 +206,17 @@ train_hist_edge = np.ones(len(train_hist_row))
 # 将行和列列表转换为数组
 train_hist_row = np.array(train_hist_row)
 train_hist_col = np.array(train_hist_col)
-# 使用稀疏矩阵格式构建训练历史矩阵
+# 使用稀疏矩阵格式构建训练历史矩阵（user × item）
 train_hist_mat = csr_matrix((train_hist_edge, (train_hist_row, train_hist_col)), shape=(user_count+1, item_count+1))
 
-# 初始化类别列表，用于后续处理
+# 初始化 物品聚类列表为 初始物品类别列表
 i_cluster_list = cate_list
 
-# 初始化行索引和列索引列表
+# 初始化行索引和列索引列表，用于构造(item x item_cluster)稀疏矩阵
 train_hist_ic_row = []
 train_hist_ic_col = []
 
-# 遍历聚类列表，填充行索引和列索引
+# 遍历物品聚类列表，填充行索引和列索引
 for item in range(len(i_cluster_list)):
     train_hist_ic_row.append(item)
     train_hist_ic_col.append(i_cluster_list[item])
@@ -225,11 +228,12 @@ train_hist_ic_edge = np.ones(len(train_hist_ic_row))
 train_hist_ic_row = np.array(train_hist_ic_row)
 train_hist_ic_col = np.array(train_hist_ic_col)
 
-# 构建稀疏矩阵，表示训练历史中类别出现的次数
+# 构建稀疏矩阵，表示训练历史中 物品到物品聚类 的映射
 train_hist_ic_mat = csr_matrix((train_hist_ic_edge, (train_hist_ic_row, train_hist_ic_col)), shape=(item_count+1, len(cat_map)+1))
 
-# 计算一阶偏好矩阵，即考虑了物品流行度和类别流行度的矩阵
-train_hist_u_1ord_mat = train_hist_mat*train_hist_ic_mat
+# (user × item_cluster) = (user × item) * (item × item_cluster)
+# 表示用户对聚类物品的 一阶 偏好程度
+train_hist_u_1ord_mat = train_hist_mat * train_hist_ic_mat
 
 # 将一阶偏好矩阵转换为密集矩阵形式
 train_hist_u_1ord_mat_dense = train_hist_u_1ord_mat.todense()
@@ -241,7 +245,7 @@ from sklearn.cluster import KMeans
 # 对用户一级序列表进行L2标准化处理，以便进行聚类分析
 train_hist_u_1ord_mat_normalized = preprocessing.normalize(train_hist_u_1ord_mat_dense, norm='l2')
 
-# 使用KMeans算法进行聚类，设置随机状态以保证结果可复现
+# 使用KMeans算法进行对用户进行聚类，使具有相同偏好的用户聚类到同一个簇
 cluster_fit = KMeans(n_clusters=20, random_state=0).fit(train_hist_u_1ord_mat_normalized)
 
 # 将聚类结果保存到文件中
@@ -267,8 +271,11 @@ train_hist_uc_row = np.array(train_hist_uc_row)
 train_hist_uc_col = np.array(train_hist_uc_col)
 train_hist_uc_mat = csr_matrix((train_hist_uc_edge, (train_hist_uc_row, train_hist_uc_col)), shape=(user_count+1, len(set(u_cluster_list))))
 
-# 计算用户二级序列表和物品二级序列表
+# 计算用户二级序列表
+# (user × user_cluster) = (user × item) * [(item × user) * (user × user_cluster)]
 train_hist_u_2ord_mat = train_hist_mat*(train_hist_mat.T*train_hist_uc_mat)
+
+# (item × item_cluster) = (item × user) * [(user × item) * (item × item_cluster)]
 train_hist_i_2ord_mat = train_hist_mat.T*(train_hist_mat*train_hist_ic_mat)
 
 # 将二级序列表转换为密集矩阵
@@ -276,18 +283,21 @@ train_hist_u_2ord_mat_dense = train_hist_u_2ord_mat.todense()
 train_hist_i_2ord_mat_dense = train_hist_i_2ord_mat.todense()
 
 # 计算用户一级序列表和物品一级序列表
+# (user × item_cluster) = (user × item) * (item × item_cluster)
 train_hist_u_1ord_mat = train_hist_mat*train_hist_ic_mat
+# (item × user_cluster) = (item × user) * (user × user_cluster)
 train_hist_i_1ord_mat = train_hist_mat.T*train_hist_uc_mat
 
-# 将一级序列表转换为密集矩阵
+# 将稀疏矩阵转换为密集矩阵
 train_hist_u_1ord_mat_dense = train_hist_u_1ord_mat.todense()
 train_hist_i_1ord_mat_dense = train_hist_i_1ord_mat.todense()
 
 # 将矩阵转换为数组形式方便后续处理
-train_hist_u_1ord_mat_dense_arr = train_hist_u_1ord_mat_dense.A
-train_hist_u_2ord_mat_dense_arr = train_hist_u_2ord_mat_dense.A
-train_hist_i_1ord_mat_dense_arr = train_hist_i_1ord_mat_dense.A
-train_hist_i_2ord_mat_dense_arr = train_hist_i_2ord_mat_dense.A
+train_hist_u_1ord_mat_dense_arr = train_hist_u_1ord_mat_dense.A # (user × item_cluster)
+train_hist_u_2ord_mat_dense_arr = train_hist_u_2ord_mat_dense.A # (user × user_cluster)
+
+train_hist_i_1ord_mat_dense_arr = train_hist_i_1ord_mat_dense.A # (item × user_cluster)
+train_hist_i_2ord_mat_dense_arr = train_hist_i_2ord_mat_dense.A # (item × item_cluster)
 
 # 重置训练集评估数据框的索引
 train_eval_df = train_eval_df.reset_index(drop=True)
@@ -297,6 +307,7 @@ train_data = []
 
 # 遍历训练评估数据框的每一行
 for idx, row in train_eval_df.iterrows():
+    # train_eval_df column name: user_id, item_id, ratting, timestamp
     # 每处理100000行数据打印一次进度
     if idx % 100000 == 0:
         print("now have processed %d"%idx)
@@ -306,28 +317,33 @@ for idx, row in train_eval_df.iterrows():
     # 如果用户或物品在训练历史字典中不存在，则跳过当前行
     if (now_user not in pos_user_train_hist_dict.keys()) or (now_item not in pos_item_train_hist_dict.keys()):
         continue
-    # 提取当前行的标签（用户对物品的评分）
+
+    # 提取当前行的标签（用户对物品的评分: 0/1）
     now_label = row[2]
     # 提取用户的一阶和二阶历史行为序列
-    now_user_1hop = train_hist_u_1ord_mat_dense_arr[now_user]
-    now_user_2hop = train_hist_u_2ord_mat_dense_arr[now_user]
+    now_user_1hop = train_hist_u_1ord_mat_dense_arr[now_user] # user - item_cluster
+    now_user_2hop = train_hist_u_2ord_mat_dense_arr[now_user] # user - user_cluster
     # 提取物品的一阶和二阶历史行为序列
-    now_item_1hop = train_hist_i_1ord_mat_dense_arr[now_item]
+    now_item_1hop = train_hist_i_1ord_mat_dense_arr[now_item] # 
     now_item_2hop = train_hist_i_2ord_mat_dense_arr[now_item]
-    # 初始化用户和物品的最近行为序列列表
+
+    # 提取用户对物品最近的行为记录
     user_recent = []
     user_recent.extend(recent_user_train_hist_dict[now_user])
-    # 如果最近行为序列长度不足，用0进行填充
+    # 如果最近行为序列长度不足，用0在后面进行填充
     if len(user_recent) < recent_len:
         pad = [0 for i in range(recent_len-len(user_recent))]
-        user_recent.extend(pad)
+        user_recent.extend(pad) 
+    
+    # 提取物品对用户的最近行为序列
     item_recent = []
     item_recent.extend(recent_item_train_hist_dict[now_item])
     if len(item_recent) < recent_len:
         pad = [0 for i in range(recent_len-len(item_recent))]
         item_recent.extend(pad)
+    
     # 将用户ID、用户行为序列、物品ID、物品行为序列和标签合并为一个序列
-    # 这个序列用于表示一个训练样本
+    # 这个序列用于表示一个训练样本: user_idx, user_1hop(user - item_cluster), user_2hop(user - user_cluster), user_recent(last 20 user_id, item_id, ratting, timestamp), item_idx, item_1hop(item - user_cluster), item_2hop(item - item_cluster), item_recent, label)
     now_train_seq = np.concatenate([np.array([now_user]), now_user_1hop, now_user_2hop, user_recent, np.array([now_item]), now_item_1hop, now_item_2hop, item_recent, np.array([now_label])], axis=0)
     # 将当前样本序列添加到训练数据列表中
     train_data.append(now_train_seq)
@@ -336,7 +352,7 @@ for idx, row in train_eval_df.iterrows():
 # 将训练数据转换为NumPy数组，以便进行后续处理
 train_data = np.array(train_data)
 
-# 初始化用户-物品交互的训练集行和列的列表
+# 初始化 用户-物品 交互的训练集行和列的列表
 train_row = []
 train_col = []
 # 遍历训练数据中的用户和物品，填充训练集的行和列
@@ -350,6 +366,7 @@ train_edge = np.ones(len(train_row))
 # 将行和列转换为NumPy数组，并使用csr矩阵格式构造训练集矩阵
 train_row = np.array(train_row)
 train_col = np.array(train_col)
+# 训练集矩阵，矩阵内容为用户和物品的交互情况
 train_mat = csr_matrix((train_edge, (train_row, train_col)), shape=(user_count+1, item_count+1))
 
 # 初始化用户聚类的行和列的列表
@@ -380,12 +397,16 @@ train_ic_edge = np.ones(len(train_ic_row))
 train_ic_row = np.array(train_ic_row)
 train_ic_col = np.array(train_ic_col)
 
+# 用户聚类矩阵，矩阵内容为用户到用户聚类的映射
 train_uc_mat = csr_matrix((train_uc_edge, (train_uc_row, train_uc_col)), shape=(user_count+1, len(set(u_cluster_list))))
+# 物品聚类矩阵，矩阵内容为物品到物品聚类的映射
 train_ic_mat = csr_matrix((train_ic_edge, (train_ic_row, train_ic_col)), shape=(item_count+1, len(cat_map)+1))
 
 # 计算用户二阶相似度矩阵
-train_u_2ord_mat = train_mat*(train_mat.T*train_uc_mat)
+# (user x user_cluster) = (user x item) * (item x user) * (user x user_cluster)
+train_u_2ord_mat = train_mat * (train_mat.T * train_uc_mat)
 # 计算物品二阶相似度矩阵
+# (item x item_cluster) = (item x user) * (user x item) * (item x item_cluster)
 train_i_2ord_mat = train_mat.T*(train_mat*train_ic_mat)
 
 # 将稀疏矩阵转换为密集矩阵，以便进行后续计算
@@ -393,8 +414,10 @@ train_u_2ord_mat_dense = train_u_2ord_mat.todense()
 train_i_2ord_mat_dense = train_i_2ord_mat.todense()
 
 # 计算用户一阶相似度矩阵
+# (user x item_cluster) = (user x item) * (item x item_cluster))
 train_u_1ord_mat = train_mat*train_ic_mat
 # 计算物品一阶相似度矩阵
+# (item x user_cluster) = (item x user) * (user x user_cluster)
 train_i_1ord_mat = train_mat.T*train_uc_mat
 
 # 将稀疏矩阵转换为密集矩阵，以便进行后续计算
@@ -464,9 +487,9 @@ i_cluster_num = len(cat_map)
 # 使用pickle将训练数据、测试数据、类别列表、用户聚类列表、物品聚类列表以及相关计数保存到文件中
 # 这便于后续模型的训练和评估
 with open('../ml-10m.pkl', 'wb') as f:
-    pickle.dump(train_data, f, pickle.HIGHEST_PROTOCOL)
-    pickle.dump(test_data, f, pickle.HIGHEST_PROTOCOL)
-    pickle.dump(cate_list, f, pickle.HIGHEST_PROTOCOL)
-    pickle.dump(u_cluster_list, f, pickle.HIGHEST_PROTOCOL)
-    pickle.dump(i_cluster_list, f, pickle.HIGHEST_PROTOCOL)
-    pickle.dump((user_count, item_count, cate_count, u_cluster_num, i_cluster_num), f, pickle.HIGHEST_PROTOCOL)
+    pickle.dump(train_data, f, pickle.HIGHEST_PROTOCOL) # 训练数据
+    pickle.dump(test_data, f, pickle.HIGHEST_PROTOCOL) # 测试数据
+    pickle.dump(cate_list, f, pickle.HIGHEST_PROTOCOL) # 物品类别列表
+    pickle.dump(u_cluster_list, f, pickle.HIGHEST_PROTOCOL) # 用户聚类列表
+    pickle.dump(i_cluster_list, f, pickle.HIGHEST_PROTOCOL) # 物品聚类列表
+    pickle.dump((user_count, item_count, cate_count, u_cluster_num, i_cluster_num), f, pickle.HIGHEST_PROTOCOL) # 相关计数

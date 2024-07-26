@@ -26,9 +26,9 @@ class DatasetBuilder(torch.utils.data.Dataset):
         
         将输入数据转换为Tensor格式，并存储用户和物品的维度信息。
         """
-        # 将输入数据的前两列（用户和物品信息）转换为长整型Tensor
+        # 将数据集转换为长整型Tensor，去除标签列
         self.x = torch.tensor(data[:, :-1], dtype=torch.long)
-        # 将输入数据的最后一列（标签）转换为浮点型Tensor，并增加一个维度
+        # 将数据集最后一列（标签）转换为浮点型Tensor，并增加一个维度，变成一个二维张量
         self.y = torch.tensor(data[:, -1], dtype=torch.float).unsqueeze(1)
         # 存储用户和物品的维度信息
         self.field_dims = [user_count, item_count]
